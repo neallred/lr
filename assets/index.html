@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  </head>
+  <body>
+    <div class="body">
+      <div id="lr">
+        <div id="l" class="option">
+          <div class="letter">L</div>
+          <div class="time">0:00</div>
+          <div class="state">||</div>
+        </div>
+        <div id="r" class="option">
+          <div class="letter">R</div>
+          <div class="time">0:00</div>
+          <div class="state">||</div>
+        </div>
+      </div>
+      <div><button>Finish</button></div>
+      <div>Last: <span id="last"></span> <span id="ago"></span></div>
+    </div>
+  </body>
+  <script>
+    function timePad(x) {
+      return x < 10 ? `0${x}` : x.toString()
+    }
+    function initStore(storage) {
+      const item = storage.getItem('lr')
+      if (item === null) {
+        return {
+          last: null,
+          current: null,
+          lastTime: 0
+        }
+      }
+      const parsed = JSON.parse(item)
+      if (parsed.current) {
+        parsed.current = null;
+        storage.setItem('lr', JSON.stringify(parsed))
+      }
+      return {
+        last: parsed.last || null,
+        current: parsed.current,
+        lastTime: parsed.lastTime || 0,
+      }
+    }
+    function writeStore(store, state) {
+      store.setItem('lr', JSON.stringify(state))
+    }
+
+    function divRem(y,x) {
+      return [Math.floor(y/x), y % x]
+    }
+
+    function getNow() {
+      return Math.floor(Date.now() / 1000);
+    }
+
+    ;(function main() {
+      const config = {
+        TICK: 1000,
+        REFRESH: 1000 * 60,
+      }
+      const lastEl = document.getElementById('last')
+      const agoEl = document.getElementById('ago')
+      const buttonEl = document.querySelector('button')
+      const l = {
+        el: document.getElementById("l"),
+        count: 0,
+      }
+      const r = {
+        el: document.getElementById("r"),
+        count: 0,
+      }
+      const store = initStore(window.localStorage)
+      var tickInterval = 0
+      refresh()
+      var refreshInterval = window.setInterval(refresh, config.REFRESH)
+      drawAgo(getNow(), store.lastTime)
+      drawLast(store.last)
+
+
+      function tap(tgtEl) {
+        store.lastTime = getNow()
+        const option = tgtEl.currentTarget
+        const tappedLeft = option === l.el
+        const tappedRight = !tappedLeft
+        const otherOption = tappedLeft ? r.el : l.el
+        const shouldPause = (tappedLeft && store.current === 'l') || (tappedRight && store.current === 'r')
+        otherOption.querySelector('.state').innerHTML = '||'
+        let nextOptionText = '|>'
+
+        if (store.current === null) {
+          tickInterval = window.setInterval(ticker, config.TICK)
+          window.clearInterval(refreshInterval)
+          clearAgo()
+          store.current = tappedLeft ? 'l' : 'r'
+          store.last = tappedLeft ? 'l' : 'r'
+        } else if (shouldPause) {
+          store.current = null
+          store.last = tappedLeft ? 'l' : 'r'
+          nextOptionText = '||'
+          window.clearInterval(tickInterval)
+          refresh()
+          refreshInterval = window.setInterval(refresh, config.REFRESH)
+        } else {
+          store.current = tappedLeft ? 'l' : 'r'
+          store.last = tappedLeft ? 'l' : 'r'
+        }
+        option.querySelector('.state').innerHTML = nextOptionText
+        drawLast(store.last)
+        writeStore(window.localStorage, { last: store.last, current: store.current, lastTime: store.lastTime })
+      }
+      function finish(tgtEl) {
+        l.count = 0
+        r.count = 0
+        store.current = null
+        window.clearInterval(refreshInterval)
+        window.clearInterval(tickInterval)
+        drawTime(l)
+        l.el.querySelector('.state').innerHTML = '||'
+        drawTime(r)
+        r.el.querySelector('.state').innerHTML = '||'
+        refresh()
+        refreshInterval = window.setInterval(refresh, config.REFRESH)
+      }
+
+      l.el.addEventListener("click", tap)
+      r.el.addEventListener("click", tap)
+      buttonEl.addEventListener('click', finish) 
+
+      function ticker() {
+        if (store.current === null) {
+          window.clearInterval(ticker)
+          return
+        }
+        const option = store.current === 'l' ? l : r
+        option.count++
+        drawTime(option)
+        console.log('ticker')
+      }
+
+      function refresh() {
+        drawAgo(getNow(), store.lastTime)
+        console.log('refresh')
+      }
+
+      function drawTime(option) {
+        const [min, sec] = divRem(option.count, 60)
+        option.el.querySelector('.time').innerHTML = `${min}:${timePad(sec)}`
+      }
+      function drawLast(current) {
+        let text = ''
+        if (current === 'l') text = 'Left'
+        if (current === 'r') text = 'Right'
+        lastEl.innerHTML = text
+      }
+      function clearAgo(t1, t0) {
+        agoEl.innerHTML = ''
+      }
+
+      function drawAgo(t1, t0) {
+        if (t0 === 0) {
+          agoEl.innerHTML = '(time unknown)';
+          return
+        }
+
+        const [minRaw, sec] = divRem((t1 - t0), 60)
+        const [hr, min] = divRem(minRaw, 60)
+        let text = ''
+        if (hr > 0) text += `${timePad(hr)}:`
+        if (min > 0 || hr > 0) text += `${timePad(min)}:`
+        if (text === '') {
+          text = `${timePad(sec)} sec ago`
+        } else {
+          text += `${timePad(sec)} ago`
+        }
+        agoEl.innerHTML = `(${text})`;
+      }
+
+    })()
+  </script>
+  <style>
+    body {
+      margin: 0;
+    }
+    .body {
+      max-width: 800px;
+      width: 100vw;
+      margin: 20px auto 0;
+      text-align: center;
+      font-size: 2em;
+    }
+    .option {
+      border: 1px solid black;
+      border-radius: 100%;
+      width: 150px;
+      height: 150px;
+    }
+    #lr {
+      display: flex;
+      justify-content: center;
+    }
+    .option:first-child {
+      margin-right: 5px;
+    }
+    .option:last-child {
+      margin-left: 5px;
+    }
+    button {
+      background-color: transparent;
+      border: 1px solid black;
+      border-radius: 2px;
+      margin: 1em 0;
+      padding: 1em 0.5em;
+      font-size: 100%;
+    }
+  </style>
+</html>
