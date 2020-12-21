@@ -2,6 +2,7 @@
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="utf-8">
   </head>
   <body>
     <div class="body">
@@ -19,6 +20,7 @@
       </div>
       <div><button>Finish</button></div>
       <div>Last: <span id="last"></span> <span id="ago"></span></div>
+      <div id="out"></div>
     </div>
   </body>
   <script>
@@ -89,6 +91,7 @@
         const otherOption = tappedLeft ? r.el : l.el
         const shouldPause = (tappedLeft && store.current === 'l') || (tappedRight && store.current === 'r')
         otherOption.querySelector('.state').innerHTML = '||'
+        otherOption.classList.remove('option--selected')
         let nextOptionText = '|>'
 
         if (store.current === null) {
@@ -97,6 +100,7 @@
           clearAgo()
           store.current = tappedLeft ? 'l' : 'r'
           store.last = tappedLeft ? 'l' : 'r'
+          option.classList.add('option--selected')
         } else if (shouldPause) {
           store.current = null
           store.last = tappedLeft ? 'l' : 'r'
@@ -104,7 +108,9 @@
           window.clearInterval(tickInterval)
           refresh()
           refreshInterval = window.setInterval(refresh, config.REFRESH)
+          option.classList.remove('option--selected')
         } else {
+          option.classList.add('option--selected')
           store.current = tappedLeft ? 'l' : 'r'
           store.last = tappedLeft ? 'l' : 'r'
         }
@@ -120,8 +126,10 @@
         window.clearInterval(tickInterval)
         drawTime(l)
         l.el.querySelector('.state').innerHTML = '||'
+        l.el.classList.remove('option--selected')
         drawTime(r)
         r.el.querySelector('.state').innerHTML = '||'
+        r.el.classList.remove('option--selected')
         refresh()
         refreshInterval = window.setInterval(refresh, config.REFRESH)
       }
@@ -129,6 +137,10 @@
       l.el.addEventListener("click", tap)
       r.el.addEventListener("click", tap)
       buttonEl.addEventListener('click', finish) 
+      document.addEventListener('visibilitychange', function() {
+        console.log(document.visibilityState)
+        document.getElementById('out').innerHTML = document.visibilityState
+      })
 
       function ticker() {
         if (store.current === null) {
@@ -197,6 +209,10 @@
       border-radius: 100%;
       width: 150px;
       height: 150px;
+      transition: background-color 0.3s ease;
+    }
+    .option--selected {
+      background-color: #ffef00;
     }
     #lr {
       display: flex;
