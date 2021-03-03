@@ -27,9 +27,13 @@ function x() {
   local tgt_dir="./target/x86_64-unknown-linux-musl/debug"
   case $cmd in
     dev)
+      # In case file does not exist, prevent build.rs error
+      touch src/main.rs
       cargo run --target x86_64-unknown-linux-musl
       ;;
     prod)
+      # In case file does not exist, prevent build.rs error
+      touch src/main.rs
       cargo build --release --target x86_64-unknown-linux-musl
       ;;
     setup)

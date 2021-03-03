@@ -20,53 +20,82 @@
       </div>
       <div><button>Finish</button></div>
       <div>Last: <span id="last"></span> <span id="ago"></span></div>
-      <div id="out"></div>
     </div>
   </body>
   <script>
     function timePad(x) {
       return x < 10 ? `0${x}` : x.toString()
     }
-    function initStore(storage) {
-      const item = storage.getItem('lr')
-      if (item === null) {
-        return {
-          last: null,
-          current: null,
-          lastTime: 0
-        }
+    function initStore(local) {
+      const item = local.getItem('lr')
+      const store = {
+        last: null,
+        lastTime: 0,
+        current: null,
+        tickInterval: 0, 
+        refreshInterval: 0, 
       }
-      const parsed = JSON.parse(item)
-      if (parsed.current) {
-        parsed.current = null;
-        storage.setItem('lr', JSON.stringify(parsed))
+      if (item) {
+        const { last, lastTime } = JSON.parse(item)
+        store.last = last || null
+        store.lastTime = lastTime || null
       }
-      return {
-        last: parsed.last || null,
-        current: parsed.current,
-        lastTime: parsed.lastTime || 0,
-      }
+      return store
     }
     function writeStore(store, state) {
       store.setItem('lr', JSON.stringify(state))
     }
-
     function divRem(y,x) {
       return [Math.floor(y/x), y % x]
     }
-
     function getNow() {
-      return Math.floor(Date.now() / 1000);
+      return Math.floor(Date.now() / 1000)
+    }
+    function clearEl(el) {
+      el.innerHTML = ''
+    }
+    function drawAgo(el, t1, t0) {
+      if (t0 === 0) {
+        el.innerHTML = '(time unknown)'
+        return
+      }
+
+      const [minRaw, sec] = divRem((t1 - t0), 60)
+      const [hr, min] = divRem(minRaw, 60)
+      let text = ''
+      if (hr > 0) text += `${timePad(hr)}:`
+      if (min > 0 || hr > 0) text += `${timePad(min)}:`
+      if (text === '') {
+        text = `${timePad(sec)} sec ago`
+      } else {
+        text += `${timePad(sec)} ago`
+      }
+      el.innerHTML = `(${text})`;
+    }
+    function drawTime(option) {
+      const [min, sec] = divRem(option.count, 60)
+      option.el.querySelector('.time').innerHTML = `${min}:${timePad(sec)}`
+    }
+    function drawLast(last, el) {
+      let text = ''
+      if (last === 'l') text = 'Left'
+      if (last === 'r') text = 'Right'
+      el.innerHTML = text
+    }
+
+
+    const config = {
+      TICK: 1000,
+      REFRESH: 1000 * 60,
+      FUDGE_COUNT_IF: 3,
     }
 
     ;(function main() {
-      const config = {
-        TICK: 1000,
-        REFRESH: 1000 * 60,
+      const dom = {
+        last: document.getElementById('last'),
+        ago: document.getElementById('ago'),
+        finish: document.querySelector('button'),
       }
-      const lastEl = document.getElementById('last')
-      const agoEl = document.getElementById('ago')
-      const buttonEl = document.querySelector('button')
       const l = {
         el: document.getElementById("l"),
         count: 0,
@@ -76,14 +105,16 @@
         count: 0,
       }
       const store = initStore(window.localStorage)
-      var tickInterval = 0
+      function refresh() {
+        drawAgo(dom.ago, getNow(), store.lastTime)
+      }
       refresh()
-      var refreshInterval = window.setInterval(refresh, config.REFRESH)
-      drawAgo(getNow(), store.lastTime)
-      drawLast(store.last)
-
+      store.refreshInterval = window.setInterval(refresh, config.REFRESH)
+      drawAgo(dom.ago, getNow(), store.lastTime)
+      drawLast(store.last, dom.last)
 
       function tap(tgtEl) {
+        sessionStorage.removeItem('lastticker')
         store.lastTime = getNow()
         const option = tgtEl.currentTarget
         const tappedLeft = option === l.el
@@ -94,53 +125,54 @@
         otherOption.classList.remove('option--selected')
         let nextOptionText = '|>'
 
+        store.last = tappedLeft ? 'l' : 'r'
         if (store.current === null) {
-          tickInterval = window.setInterval(ticker, config.TICK)
-          window.clearInterval(refreshInterval)
-          clearAgo()
+          store.tickInterval = window.setInterval(ticker, config.TICK)
+          window.clearInterval(store.refreshInterval)
+          clearEl(dom.ago)
           store.current = tappedLeft ? 'l' : 'r'
-          store.last = tappedLeft ? 'l' : 'r'
           option.classList.add('option--selected')
         } else if (shouldPause) {
           store.current = null
-          store.last = tappedLeft ? 'l' : 'r'
           nextOptionText = '||'
-          window.clearInterval(tickInterval)
+          window.clearInterval(store.tickInterval)
           refresh()
-          refreshInterval = window.setInterval(refresh, config.REFRESH)
+          store.refreshInterval = window.setInterval(refresh, config.REFRESH)
           option.classList.remove('option--selected')
         } else {
           option.classList.add('option--selected')
           store.current = tappedLeft ? 'l' : 'r'
-          store.last = tappedLeft ? 'l' : 'r'
         }
         option.querySelector('.state').innerHTML = nextOptionText
-        drawLast(store.last)
-        writeStore(window.localStorage, { last: store.last, current: store.current, lastTime: store.lastTime })
+        drawLast(store.last, dom.last)
+        writeStore(window.localStorage, { last: store.last, lastTime: store.lastTime })
       }
-      function finish(tgtEl) {
-        l.count = 0
-        r.count = 0
+      function finish() {
+        sessionStorage.removeItem('lastticker')
+        if (store.current) {
+          store.lastTime = getNow()
+        }
         store.current = null
-        window.clearInterval(refreshInterval)
-        window.clearInterval(tickInterval)
+        writeStore(window.localStorage, { last: store.last, lastTime: store.lastTime })
+        window.clearInterval(store.refreshInterval)
+        window.clearInterval(store.tickInterval)
+
+        l.count = 0
         drawTime(l)
         l.el.querySelector('.state').innerHTML = '||'
         l.el.classList.remove('option--selected')
+
+        r.count = 0
         drawTime(r)
         r.el.querySelector('.state').innerHTML = '||'
         r.el.classList.remove('option--selected')
         refresh()
-        refreshInterval = window.setInterval(refresh, config.REFRESH)
+        store.refreshInterval = window.setInterval(refresh, config.REFRESH)
       }
 
       l.el.addEventListener("click", tap)
       r.el.addEventListener("click", tap)
-      buttonEl.addEventListener('click', finish) 
-      document.addEventListener('visibilitychange', function() {
-        console.log(document.visibilityState)
-        document.getElementById('out').innerHTML = document.visibilityState
-      })
+      dom.finish.addEventListener('click', finish) 
 
       function ticker() {
         if (store.current === null) {
@@ -148,49 +180,16 @@
           return
         }
         const option = store.current === 'l' ? l : r
-        option.count++
-        drawTime(option)
-        console.log('ticker')
-      }
-
-      function refresh() {
-        drawAgo(getNow(), store.lastTime)
-        console.log('refresh')
-      }
-
-      function drawTime(option) {
-        const [min, sec] = divRem(option.count, 60)
-        option.el.querySelector('.time').innerHTML = `${min}:${timePad(sec)}`
-      }
-      function drawLast(current) {
-        let text = ''
-        if (current === 'l') text = 'Left'
-        if (current === 'r') text = 'Right'
-        lastEl.innerHTML = text
-      }
-      function clearAgo(t1, t0) {
-        agoEl.innerHTML = ''
-      }
-
-      function drawAgo(t1, t0) {
-        if (t0 === 0) {
-          agoEl.innerHTML = '(time unknown)';
-          return
-        }
-
-        const [minRaw, sec] = divRem((t1 - t0), 60)
-        const [hr, min] = divRem(minRaw, 60)
-        let text = ''
-        if (hr > 0) text += `${timePad(hr)}:`
-        if (min > 0 || hr > 0) text += `${timePad(min)}:`
-        if (text === '') {
-          text = `${timePad(sec)} sec ago`
+        const now = getNow()
+        const lastticker = sessionStorage.getItem('lastticker') || now
+        sessionStorage.setItem('lastticker', now)
+        if ((now - lastticker) > config.FUDGE_COUNT_IF) {
+          option.count = now - lastticker
         } else {
-          text += `${timePad(sec)} ago`
+          option.count++
         }
-        agoEl.innerHTML = `(${text})`;
+        drawTime(option)
       }
-
     })()
   </script>
   <style>
